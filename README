@@ -1,0 +1,50 @@
+================
+django-websocket
+================
+
+Examples
+========
+
+Receive one message from the client, send that message back to the client and
+close the connection (by returning from the view)::
+
+    from django_websocket import require_websocket
+
+    @require_websocket
+    def echo_once(request):
+        message = request.websocket.wait()
+        request.websocket.send(message)
+
+Send websocket messages from the client as lowercase and provide same
+functionallity for normal GET requests::
+
+    from django.http import HttpResponse
+    from django_websocket import accept_websocket
+
+    def modify_message(message):
+        return message.lower()
+
+    @accept_websocket
+    def lower_case(request):
+        if not request.is_websocket():
+            message = request.GET['message']
+            message = modify_message(message)
+            return HttpResponse(message)
+        else:
+            for message in request.websocket:
+                message = modify_message(message)
+                request.websocket.send(message)
+
+Authors
+=======
+
+- Gregor Müllegger <gregor@muellegger.de> (http://gremu.net/)
+
+Credits
+-------
+
+Some low-level code for WebSocket implementation is borrowed from the `eventlet
+library`_.
+
+.. _`eventlet library`: http://eventlet.net/
+
