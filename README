@@ -35,6 +35,11 @@ functionallity for normal GET requests::
                 message = modify_message(message)
                 request.websocket.send(message)
 
+Contribute
+==========
+
+Get the code at github: http://github.com/gregor-muellegger/django-websocket
+
 Authors
 =======
 

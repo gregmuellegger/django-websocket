@@ -1,3 +1,4 @@
+*.pyc
 dist
 build
 django_websocket.egg-info
