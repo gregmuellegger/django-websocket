@@ -2,6 +2,78 @@
 django-websocket
 ================
 
+The **django-websocket** module provides an implementation of the WebSocket
+Protocol for django. It handles all the low-level details like establishing
+the connection through sending handshake reply, parsing messages from the
+browser etc...
+
+It integrates well into django since it provides easy hooks to receive
+WebSocket requests either for single views through decorators or for the whole
+site through a custom middleware.
+
+Usage
+=====
+
+You can use the ``accept_websocket`` decorator if you want to handle websocket
+connections just for a single view - it will route standard HTTP requests to
+the view as well. Use ``require_websocket`` to only allow WebSocket
+connections but reject normal HTTP requests.
+
+You can use a middleware if you want to have WebSockets available for *all*
+URLs in your application. Add
+``django_websocket.middleware.WebSocketMiddleware`` to your
+``MIDDLEWARE_CLASSES`` setting. This will still reject websockets for normal
+views. You have to set the ``accept_websocket`` attribute on a view to allow
+websockets.
+
+To allow websockets for *every single view*, set the ``WEBSOCKET_ACCEPT_ALL``
+setting to ``True``.
+
+The request objects passed to a view, decorated with ``accept_websocket`` or
+``require_websocket`` will have the following attributes/methods attached.
+These attributes are always available if you use the middleware.
+
+``request.is_websocket()``
+--------------------------
+
+Returns either ``True`` if the request has a valid websocket or ``False`` if
+its a normal HTTP request. Use this method in views that can accept both types
+of requests to distinguish between them.
+
+``request.websocket``
+---------------------
+
+After a websocket is established, the request will have a ``websocket``
+attribute which provides a simple API to communicate with the client. This
+attribute will be ``None`` if ``request.is_websocket()`` returns ``False``.
+
+It has the following public methods:
+
+``WebSocket.wait()``
+~~~~~~~~~~~~~~~~~~~~
+
+This will return exactly one message sent by the client. It will not return
+before a message is received or the conection is closed by the client. In this
+case the method will return ``None``.
+
+``WebSocket.send(message)``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This will send a single message to the client.
+
+``WebSocket.__iter__()``
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can use the websocket as iterator. It will yield every new message sent by
+the client and stop iteration after the client has closed the connection.
+
+Error handling
+--------------
+
+The library will return a Http 400 error (Bad Request) if the client requests
+a WebSocket connection, but the request is malformed or not supported by
+*django-websocket*.
+
 Examples
 ========
 
