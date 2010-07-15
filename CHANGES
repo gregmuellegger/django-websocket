@@ -1,6 +1,13 @@
 Changelog
 =========
 
+Release 0.1.1
+-------------
+
+- Fixed a bug in ``BaseWebSocketMiddleware`` that caused an exception in
+  ``process_response`` if ``setup_websocket`` failed. Thanks to cedric salaun
+  for the report.
+
 Release 0.1.0
 -------------
 
