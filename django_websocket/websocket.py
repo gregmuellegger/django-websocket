@@ -106,7 +106,7 @@ class WebSocket(object):
         self.socket = socket
         self.protocol = protocol
         self.version = version
-        self.websocket_closed = False
+        self.closed = False
         self.handshake_reply = handshake_reply
         if handshake_sent is None:
             self._handshake_sent = not bool(handshake_reply)
@@ -154,7 +154,7 @@ class WebSocket(object):
             elif frame_type == 255:
                 # Closing handshake.
                 assert ord(buf[1]) == 0, "Unexpected closing handshake: %r" % buf
-                self.websocket_closed = True
+                self.closed = True
                 break
             else:
                 raise ValueError("Don't understand how to parse this type of message: %r" % buf)
@@ -173,7 +173,7 @@ class WebSocket(object):
         message; the oldest not yet processed."""
         while not self._msgs:
             # Websocket might be closed already.
-            if self.websocket_closed:
+            if self.closed:
                 return None
             # no parsed messages, must mean buf needs more data
             delta = self.socket.recv(8096)
@@ -197,7 +197,7 @@ class WebSocket(object):
 
     def _send_closing_frame(self, ignore_send_errors=False):
         """Sends the closing frame to the client, if required."""
-        if self.version == 76 and not self.websocket_closed:
+        if self.version == 76 and not self.closed:
             try:
                 self.socket.sendall("\xff\x00")
             except SocketError:
@@ -205,12 +205,11 @@ class WebSocket(object):
                 # we don't care about this.
                 if not ignore_send_errors:
                     raise
-            self.websocket_closed = True
+            self.closed = True
 
     def close(self):
-        """Forcibly close the websocket; generally it is preferable to
-        return from the handler method."""
+        '''
+        Forcibly close the websocket; generally it is preferable to
+        return from the handler method.
+        '''
         self._send_closing_frame()
-        self.socket.shutdown(True)
-        self.socket.close()
-
