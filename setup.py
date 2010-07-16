@@ -32,7 +32,7 @@ long_description = UltraMagicString('\n\n'.join((
 
 setup(
     name = u'django-websocket',
-    version = u'0.1.0',
+    version = u'0.1.2pre',
     url = u'http://pypi.python.org/pypi/django-websocket',
     license = u'BSD',
     description = u'Websocket support for django.',
