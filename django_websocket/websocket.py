@@ -207,6 +207,20 @@ class WebSocket(object):
             raise
         return self.socket in r
 
+    def _get_new_messages(self):
+        # read as long from socket as we need to get a new message.
+        while self._socket_can_recv():
+            self._socket_recv()
+            if self._message_queue:
+                return
+
+    def count_messages(self):
+        '''
+        Returns the number of queued messages.
+        '''
+        self._get_new_messages()
+        return len(self._message_queue)
+
     def has_messages(self):
         '''
         Returns ``True`` if new messages from the socket are available, else
@@ -214,11 +228,9 @@ class WebSocket(object):
         '''
         if self._message_queue:
             return True
-        # read as long from socket as we need to get a new message.
-        while self._socket_can_recv():
-            self._socket_recv()
-            if self._message_queue:
-                return True
+        self._get_new_messages()
+        if self._message_queue:
+            return True
         return False
 
     def read(self, fallback=None):

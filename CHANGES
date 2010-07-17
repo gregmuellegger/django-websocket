@@ -15,6 +15,7 @@ Release 0.1.2
 - Adding example project to play around with.
 - Adding ``WebSocket.has_messages()``. You can use it to check if new messages
   are ready to be processed.
+- Adding ``WebSocket.count_messages()``.
 
 Release 0.1.1
 -------------
