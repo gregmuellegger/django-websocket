@@ -207,20 +207,26 @@ class WebSocket(object):
             raise
         return self.socket in r
 
-    def read(self, fallback=None, timeout=0.0):
+    def has_messages(self):
+        '''
+        Returns ``True`` if new messages from the socket are available, else
+        ``False``.
+        '''
+        if self._message_queue:
+            return True
+        # read as long from socket as we need to get a new message.
+        while self._socket_can_recv():
+            self._socket_recv()
+            if self._message_queue:
+                return True
+        return False
+
+    def read(self, fallback=None):
         '''
         Return new message or ``fallback`` if no message is available.
         '''
-        # if messages left in queue, return these
-        if self._message_queue:
+        if self.has_messages():
             return self._message_queue.popleft()
-        # read as long from socket as we need to get a new message.
-        while self._socket_can_recv():
-            new_data = self._socket_recv()
-            if not new_data:
-                return fallback
-            if self._message_queue:
-                return self._message_queue.popleft()
         return fallback
 
     def wait(self):
