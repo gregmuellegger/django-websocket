@@ -9,6 +9,9 @@ Release 0.1.2
 - Changed behaviour of ``WebSocket.close()`` method. Doesn't close system
   socket - it's still need by django!
 - You can run tests now with ``python setup.py test``.
+- Refactoring ``WebSocket`` class.
+- Adding ``WebSocket.read()`` which returns ``None`` if no new messages are
+  available intead of blocking like ``WebSocket.wait()``.
 
 Release 0.1.1
 -------------
