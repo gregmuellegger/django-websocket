@@ -53,4 +53,7 @@ setup(
     ],
     zip_safe = True,
     install_requires = ['setuptools'],
+
+    test_suite = 'django_websocket_tests.runtests.runtests',
+    tests_require=['mock'],
 )

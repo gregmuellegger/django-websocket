@@ -93,3 +93,7 @@ INSTALLED_APPS = (
     # Uncomment the next line to enable the admin:
     # 'django.contrib.admin',
 )
+
+TEST_APPS = (
+    'django_websocket_tests',
+)

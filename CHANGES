@@ -8,6 +8,7 @@ Release 0.1.2
   ``WebSocket.closed``.
 - Changed behaviour of ``WebSocket.close()`` method. Doesn't close system
   socket - it's still need by django!
+- You can run tests now with ``python setup.py test``.
 
 Release 0.1.1
 -------------
