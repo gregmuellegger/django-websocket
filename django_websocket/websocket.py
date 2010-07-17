@@ -1,10 +1,12 @@
 import collections
+import select
 import string
 import struct
 try:
     from hashlib import md5
 except ImportError: #pragma NO COVER
     from md5 import md5
+from errno import EINTR
 from socket import error as SocketError
 
 
@@ -89,20 +91,31 @@ def setup_websocket(request):
 
 
 class WebSocket(object):
-    """A websocket object that handles the details of
+    """
+    A websocket object that handles the details of
     serialization/deserialization to the socket.
 
     The primary way to interact with a :class:`WebSocket` object is to
     call :meth:`send` and :meth:`wait` in order to pass messages back
     and forth with the browser.
     """
+    _socket_recv = 4096
+
+
     def __init__(self, socket, protocol, version=76,
         handshake_reply=None, handshake_sent=None):
-        """
+        '''
         Arguments:
 
+        - ``socket``: An open socket that should be used for WebSocket
+          communciation.
+        - ``protocol``: not used yet.
         - ``version``: The WebSocket spec version to follow (default is 76)
-        """
+        - ``handshake_reply``: Handshake message that should be sent to the
+          client when ``send_handshake()`` is called.
+        - ``handshake_sent``: Whether the handshake is already sent or not.
+          Set to ``False`` to prevent ``send_handshake()`` to do anything.
+        '''
         self.socket = socket
         self.protocol = protocol
         self.version = version
@@ -112,15 +125,15 @@ class WebSocket(object):
             self._handshake_sent = not bool(handshake_reply)
         else:
             self._handshake_sent = handshake_sent
-        self._buf = ""
-        self._msgs = collections.deque()
+        self._buffer = ""
+        self._message_queue = collections.deque()
 
     def send_handshake(self):
         self.socket.sendall(self.handshake_reply)
         self._handshake_sent = True
 
-    @staticmethod
-    def _pack_message(message):
+    @classmethod
+    def _pack_message(cls, message):
         """Pack the message inside ``00`` and ``FF``
 
         As per the dataframing section (5.3) for the websocket spec
@@ -132,7 +145,7 @@ class WebSocket(object):
         packed = "\x00%s\xFF" % message
         return packed
 
-    def _parse_messages(self):
+    def _parse_message_queue(self):
         """ Parses for messages in the buffer *buf*.  It is assumed that
         the buffer contains the start character for a message, but that it
         may contain only part of the rest of the message.
@@ -141,7 +154,7 @@ class WebSocket(object):
         didn't contain any full messages."""
         msgs = []
         end_idx = 0
-        buf = self._buf
+        buf = self._buffer
         while buf:
             frame_type = ord(buf[0])
             if frame_type == 0:
@@ -158,31 +171,72 @@ class WebSocket(object):
                 break
             else:
                 raise ValueError("Don't understand how to parse this type of message: %r" % buf)
-        self._buf = buf
+        self._buffer = buf
         return msgs
 
     def send(self, message):
-        """Send a message to the browser.  *message* should be
-        convertable to a string; unicode objects should be encodable
-        as utf-8."""
+        '''
+        Send a message to the client. *message* should be convertable to a
+        string; unicode objects should be encodable as utf-8.
+        '''
         packed = self._pack_message(message)
         self.socket.sendall(packed)
 
+    def _socket_recv(self):
+        '''
+        Gets new data from the socket and try to parse new messages.
+        '''
+        delta = self.socket.recv(self._socket_recv)
+        if delta == '':
+            return False
+        self._buffer += delta
+        msgs = self._parse_message_queue()
+        self._message_queue.extend(msgs)
+        return True
+
+    def _socket_can_recv(self, timeout=0.0):
+        '''
+        Return ``True`` if new data can be read from the socket.
+        '''
+        r, w, e = [self.socket], [], []
+        try:
+            r, w, e = select.select(r, w, e, timeout)
+        except select.error, err:
+            if err.args[0] == EINTR:
+                return False
+            raise
+        return self.socket in r
+
+    def read(self, fallback=None, timeout=0.0):
+        '''
+        Return new message or ``fallback`` if no message is available.
+        '''
+        # if messages left in queue, return these
+        if self._message_queue:
+            return self._message_queue.popleft()
+        # read as long from socket as we need to get a new message.
+        while self._socket_can_recv():
+            new_data = self._socket_recv()
+            if not new_data:
+                return fallback
+            if self._message_queue:
+                return self._message_queue.popleft()
+        return fallback
+
     def wait(self):
-        """Waits for and deserializes messages. Returns a single
-        message; the oldest not yet processed."""
-        while not self._msgs:
+        '''
+        Waits for and deserializes messages. Returns a single message; the
+        oldest not yet processed.
+        '''
+        while not self._message_queue:
             # Websocket might be closed already.
             if self.closed:
                 return None
             # no parsed messages, must mean buf needs more data
-            delta = self.socket.recv(8096)
-            if delta == '':
+            new_data = self._socket_recv()
+            if not new_data:
                 return None
-            self._buf += delta
-            msgs = self._parse_messages()
-            self._msgs.extend(msgs)
-        return self._msgs.popleft()
+        return self._message_queue.popleft()
 
     def __iter__(self):
         '''
@@ -196,7 +250,9 @@ class WebSocket(object):
             yield message
 
     def _send_closing_frame(self, ignore_send_errors=False):
-        """Sends the closing frame to the client, if required."""
+        '''
+        Sends the closing frame to the client, if required.
+        '''
         if self.version == 76 and not self.closed:
             try:
                 self.socket.sendall("\xff\x00")
@@ -209,7 +265,6 @@ class WebSocket(object):
 
     def close(self):
         '''
-        Forcibly close the websocket; generally it is preferable to
-        return from the handler method.
+        Forcibly close the websocket.
         '''
         self._send_closing_frame()
