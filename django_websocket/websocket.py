@@ -99,7 +99,7 @@ class WebSocket(object):
     call :meth:`send` and :meth:`wait` in order to pass messages back
     and forth with the browser.
     """
-    _socket_recv = 4096
+    _socket_recv_bytes = 4096
 
 
     def __init__(self, socket, protocol, version=76,
@@ -186,7 +186,7 @@ class WebSocket(object):
         '''
         Gets new data from the socket and try to parse new messages.
         '''
-        delta = self.socket.recv(self._socket_recv)
+        delta = self.socket.recv(self._socket_recv_bytes)
         if delta == '':
             return False
         self._buffer += delta
