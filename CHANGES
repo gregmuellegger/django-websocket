@@ -12,6 +12,7 @@ Release 0.1.2
 - Refactoring ``WebSocket`` class.
 - Adding ``WebSocket.read()`` which returns ``None`` if no new messages are
   available intead of blocking like ``WebSocket.wait()``.
+- Adding example project to play around with.
 
 Release 0.1.1
 -------------
