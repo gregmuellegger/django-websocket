@@ -56,6 +56,13 @@ This will return exactly one message sent by the client. It will not return
 before a message is received or the conection is closed by the client. In this
 case the method will return ``None``.
 
+``WebSocket.read()``
+~~~~~~~~~~~~~~~~~~~~
+
+The ``read`` method will return either a new message if available or ``None``
+if no new message was received from the client. It is a non-blocking
+alternative to the ``wait()`` method.
+
 ``WebSocket.send(message)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
