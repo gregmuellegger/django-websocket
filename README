@@ -124,8 +124,47 @@ functionallity for normal GET requests::
                 message = modify_message(message)
                 request.websocket.send(message)
 
+Disclaimer (what you should know when using django-websocket)
+=============================================================
+
+Using in development
+--------------------
+
+Django doesn't support a multithreaded development server yet. It is still not
+possible to open two concurrent requests. This makes working with WebSockets a
+bit tedious - since WebSockets will require an open request by their nature.
+
+This has the implication that you won't be able to have more than one
+WebSocket open at a time when using django's ``runserver`` command. It's also
+not possible to fire an AJAX request while a WebSocket is in use. Keep this in
+mind while developing and concider using another development server
+(instructions may come in the future - links to blog posts or other sources
+for this are welcome).
+
+Using in production
+-------------------
+
+Be aware that **django-websocket** is just a toy for its author to play around
+with at the moment. It is not recommended to use in production without knowing
+what you do. There are no real tests made in the wild yet.
+
+But this doesn't mean that the project won't grow up in the future. There will
+be fixes to reported bugs and feature request are welcome to improve the API.
+
+Please write me an email or contact me somewhere else if you have experience
+with **django-websocket** in a real project or even in a production
+environment.
+
 Contribute
 ==========
+
+Every contribution in any form is welcome. Ask questions, report bugs, request
+new features, make rants or tell me any other critique you may have.
+
+One of the biggest contributions you can make is giving me a quick *Thank you*
+if you like this library or if it has saved you a bunch of time.
+
+But if you want to get your hands dirty:
 
 - Get the code from github: http://github.com/gregor-muellegger/django-websocket
 - Run tests with ``python setup.py test``.
