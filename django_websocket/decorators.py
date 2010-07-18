@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils.decorators import decorator_from_middleware
-from django_websocket.middleware import BaseWebSocketMiddleware
+from django_websocket.middleware import WebSocketMiddleware
 
 __all__ = ('accept_websocket', 'require_websocket')
 
@@ -18,20 +18,20 @@ def _setup_websocket(func):
             return HttpResponse()
         return response
     if not WEBSOCKET_MIDDLEWARE_INSTALLED:
-        decorator = decorator_from_middleware(BaseWebSocketMiddleware)
+        decorator = decorator_from_middleware(WebSocketMiddleware)
         new_func = decorator(new_func)
     return new_func
 
 
 def accept_websocket(func):
-    func = _setup_websocket(func)
     func.accept_websocket = True
     func.require_websocket = getattr(func, 'require_websocket', False)
+    func = _setup_websocket(func)
     return func
 
 
 def require_websocket(func):
-    func = _setup_websocket(func)
     func.accept_websocket = True
     func.require_websocket = True
+    func = _setup_websocket(func)
     return func
