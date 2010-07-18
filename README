@@ -136,10 +136,14 @@ bit tedious - since WebSockets will require an open request by their nature.
 
 This has the implication that you won't be able to have more than one
 WebSocket open at a time when using django's ``runserver`` command. It's also
-not possible to fire an AJAX request while a WebSocket is in use. Keep this in
-mind while developing and concider using another development server
-(instructions may come in the future - links to blog posts or other sources
-for this are welcome).
+not possible to fire an AJAX request while a WebSocket is in use etc.
+
+**django-websocket** ships with a custom ``runserver`` command that works
+around these limitations. Add ``django_websocket`` to your ``INSTALLED_APPS``
+settings to install it. Use your development server like you did before and
+provide the ``--multithreaded`` option to enable multithreaded behaviour::
+
+    python manage.py runserver --multithreaded
 
 Using in production
 -------------------
