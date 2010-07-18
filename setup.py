@@ -39,7 +39,10 @@ setup(
     long_description = long_description,
     author = UltraMagicString('Gregor Müllegger'),
     author_email = u'gregor@muellegger.de',
-    packages = ['django_websocket'],
+    packages = [
+        'django_websocket',
+        'django_websocket.management',
+        'django_websocket.management.commands'],
     classifiers = [
         'Development Status :: 3 - Alpha',
         'Environment :: Web Environment',
