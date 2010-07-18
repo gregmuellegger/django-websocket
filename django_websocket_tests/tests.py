@@ -2,7 +2,10 @@
 from mock import Mock
 from django.core.urlresolvers import reverse
 from django.contrib.auth.models import User
+from django.http import HttpResponse
 from django.test import TestCase
+from test_utils.mocks import RequestFactory
+from django_websocket.decorators import accept_websocket, require_websocket
 from django_websocket.websocket import WebSocket
 
 
@@ -91,3 +94,39 @@ class WebSocketTests(TestCase):
         ws = WebSocket(self.socket, self.protocol)
         for i, message in enumerate(ws):
             self.assertEquals(message, expected_results[i])
+
+
+@accept_websocket
+def add_one(request):
+    if request.is_websocket():
+        for message in request.websocket:
+            request.websocket.send(int(message) + 1)
+    else:
+        value = int(request.GET['value'])
+        value += 1
+        return HttpResponse(unicode(value))
+
+@require_websocket
+def echo_once(request):
+    request.websocket.send(request.websocket.wait())
+
+
+class DecoratorTests(TestCase):
+    def setUp(self):
+        self.rf = RequestFactory()
+
+    def test_require_websocket_decorator(self):
+        # view requires websocket -> bad request
+        request = self.rf.get('/echo/')
+        response = echo_once(request)
+        self.assertEquals(response.status_code, 400)
+
+    def test_accept_websocket_decorator(self):
+        request = self.rf.get('/add/', {'value': '23'})
+        response = add_one(request)
+        self.assertEquals(response.status_code, 200)
+        self.assertEquals(response.content, '24')
+
+# TODO: test views with actual websocket connection - not really possible yet
+# with django's test client/request factory. Heavy use of mock objects
+# necessary.
