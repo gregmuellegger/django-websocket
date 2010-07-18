@@ -1,7 +1,7 @@
 Changelog
 =========
 
-Release 0.1.2
+Release 0.2.0
 -------------
 
 - Changed name of attribute ``WebSocket.websocket_closed`` to
@@ -16,6 +16,9 @@ Release 0.1.2
 - Adding ``WebSocket.has_messages()``. You can use it to check if new messages
   are ready to be processed.
 - Adding ``WebSocket.count_messages()``.
+- Removing ``BaseWebSocketMiddleware`` - is replaced by
+  ``WebSocketMiddleware``. Don't need for a base middleware anymore. We can
+  integrate everything in one now.
 
 Release 0.1.1
 -------------
