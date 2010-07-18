@@ -1,3 +1,6 @@
 include CHANGES
 include LICENSE
 include README
+recursive-include examples *.py
+recursive-include examples *.html
+recursive-include django_websocket_tests *.py
