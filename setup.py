@@ -25,8 +25,8 @@ class UltraMagicString(object):
 
 
 long_description = UltraMagicString('\n\n'.join((
-    file('README').read(),
-    file('CHANGES').read(),
+    file('README.rst').read(),
+    file('CHANGES.rst').read(),
 )))
 
 
