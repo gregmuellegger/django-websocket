@@ -9,8 +9,13 @@ from django.conf import settings
 
 def runtests():
     TestRunner = get_runner(settings)
-    test_runner = TestRunner(verbosity=1, interactive=True)
-    failures = test_runner.run_tests(settings.TEST_APPS)
+    if hasattr(TestRunner, '__class__'):
+        # test runner is not class based, this means we use django 1.1.x or
+        # earlier.
+        failures = TestRunner(settings.TEST_APPS, verbosity=1, interactive=True)
+    else:
+        test_runner = TestRunner(verbosity=1, interactive=True)
+        failures = test_runner.run_tests(settings.TEST_APPS)
     sys.exit(bool(failures))
 
 if __name__ == '__main__':
