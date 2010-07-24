@@ -19,7 +19,8 @@ def _extract_number(value):
     Utility function which, given a string like 'g98sd  5[]221@1', will
     return 4926105. Used to parse the Sec-WebSocket-Key headers.
 
-    XXX It returns the number due the number of spaces, is it correct?
+    In other words, it extracts digits from a string and returns the number
+    due to the number of spaces.
     """
     out = ""
     spaces = 0
