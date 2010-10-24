@@ -2,6 +2,9 @@
 django-websocket
 ================
 
+**IMPORTANT: Please read the disclaimer a few sections below before you start
+using django-websocket.**
+
 The **django-websocket** module provides an implementation of the WebSocket
 Protocol for django. It handles all the low-level details like establishing
 the connection through sending handshake reply, parsing messages from the
@@ -126,6 +129,22 @@ functionallity for normal GET requests::
 
 Disclaimer (what you should know when using django-websocket)
 =============================================================
+
+**BIG FAT DISCLAIMER** - right at the moment its technically *NOT* possible in
+any way to use a websocket with WSGI. This is a known issue but cannot be
+worked around in a clean way due to some design decision that were made while
+the WSGI stadard was written. At this time things like Websockets etc. didn't
+exist and were not predictable.
+
+However there are thoughts to extend the WSGI standard to make Websockets
+possible. `Read here for a discussion on the Paste Users mailing list
+<http://groups.google.com/group/paste-users/browse_thread/thread/2f3a5ba33b857c6c>`_.
+
+But not only WSGI is the limiting factor. Django itself was designed around a
+simple request to response scenario without Websockets in mind. This also
+means that providing a standard conform websocket implemention is not possible
+right now for django. However it works somehow in a not-so pretty way. So be
+aware that tcp sockets might get tortured while using django-websocket.
 
 Using in development
 --------------------
