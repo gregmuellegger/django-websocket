@@ -189,7 +189,7 @@ if you like this library or if it has saved you a bunch of time.
 
 But if you want to get your hands dirty:
 
-- Get the code from github: http://github.com/gregor-muellegger/django-websocket
+- Get the code from github: https://github.com/gregmuellegger/django-websocket
 - Run tests with ``python setup.py test``.
 - Start coding :)
 - Send me a pull request or an email with a patch.
