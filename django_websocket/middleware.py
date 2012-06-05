@@ -10,11 +10,14 @@ class WebSocketMiddleware(object):
     def process_request(self, request):
         try:
             request.websocket = setup_websocket(request)
-            request.is_websocket = lambda: True
         except MalformedWebSocket, e:
             request.websocket = None
             request.is_websocket = lambda: False
             return HttpResponseBadRequest()
+        if request.websocket is None:
+            request.is_websocket = lambda: False
+        else:
+            request.is_websocket = lambda: True
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         # open websocket if its an accepted request
