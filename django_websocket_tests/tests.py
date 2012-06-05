@@ -4,7 +4,7 @@ from django.core.urlresolvers import reverse
 from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.test import TestCase
-from test_utils.mocks import RequestFactory
+from django.test.client import RequestFactory
 from django_websocket.decorators import accept_websocket, require_websocket
 from django_websocket.websocket import WebSocket
 
@@ -105,6 +105,7 @@ def add_one(request):
         value = int(request.GET['value'])
         value += 1
         return HttpResponse(unicode(value))
+
 
 @require_websocket
 def echo_once(request):
