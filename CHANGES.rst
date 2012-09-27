@@ -1,6 +1,12 @@
 Changelog
 =========
 
+Release 0.4.0
+-------------
+
+- Removed multithreaded development server. Django 1.4 uses multithreading by
+  default in the ``runserver`` command.
+
 Release 0.3.0
 -------------
 

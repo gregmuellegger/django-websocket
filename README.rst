@@ -146,24 +146,6 @@ means that providing a standard conform websocket implemention is not possible
 right now for django. However it works somehow in a not-so pretty way. So be
 aware that tcp sockets might get tortured while using django-websocket.
 
-Using in development
---------------------
-
-Django doesn't support a multithreaded development server yet. It is still not
-possible to open two concurrent requests. This makes working with WebSockets a
-bit tedious - since WebSockets will require an open request by their nature.
-
-This has the implication that you won't be able to have more than one
-WebSocket open at a time when using django's ``runserver`` command. It's also
-not possible to fire an AJAX request while a WebSocket is in use etc.
-
-**django-websocket** ships with a custom ``runserver`` command that works
-around these limitations. Add ``django_websocket`` to your ``INSTALLED_APPS``
-settings to install it. Use your development server like you did before and
-provide the ``--multithreaded`` option to enable multithreaded behaviour::
-
-    python manage.py runserver --multithreaded
-
 Using in production
 -------------------
 
