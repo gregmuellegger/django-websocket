@@ -31,8 +31,8 @@ def _extract_number(value):
 
 def is_websocket(request):
     """check the websocket"""
-    if request.META.get('HTTP_CONNECTION', None).lower() == 'upgrade' and \
-        request.META.get('HTTP_UPGRADE', None).lower() == 'websocket':
+    if request.META.get('HTTP_CONNECTION', "").lower() == 'upgrade' and \
+        request.META.get('HTTP_UPGRADE', "").lower() == 'websocket':
         return True
     else:
         return False
