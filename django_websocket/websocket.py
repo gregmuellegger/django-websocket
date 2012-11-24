@@ -1,11 +1,9 @@
 import collections
+import base64
 import select
 import string
 import struct
-try:
-    from hashlib import md5
-except ImportError: #pragma NO COVER
-    from md5 import md5
+from hashlib import md5,sha1
 from errno import EINTR
 from socket import error as SocketError
 
@@ -31,66 +29,97 @@ def _extract_number(value):
             spaces += 1
     return int(out) / spaces
 
+def is_websocket(request):
+    """check the websocket"""
+    if request.META.get('HTTP_CONNECTION', None).lower() == 'upgrade' and \
+        request.META.get('HTTP_UPGRADE', None).lower() == 'websocket':
+        return True
+    else:
+        return False
+
+def get_websocket_version(request):
+    if 'HTTP_SEC_WEBSOCKET_KEY1' in request.META:
+        protocol_version = 76
+        if 'HTTP_SEC_WEBSOCKET_KEY2' not in request.META:
+            raise MalformedWebSocket()
+    elif 'HTTP_SEC_WEBSOCKET_KEY' in request.META:
+        protocol_version = 13
+    else:
+        protocol_version = 75
+    return protocol_version
+
+def make_version_76_handshake_replay(request):
+    location = 'ws://%s%s' % (request.get_host(), request.path)
+    qs = request.META.get('QUERY_STRING')
+    if qs:location += '?' + qs
+    key1 = _extract_number(request.META['HTTP_SEC_WEBSOCKET_KEY1'])
+    key2 = _extract_number(request.META['HTTP_SEC_WEBSOCKET_KEY2'])
+    # There's no content-length header in the request, but it has 8
+    # bytes of data.
+    key3 = request.META['wsgi.input'].read(8)
+    key = struct.pack(">II", key1, key2) + key3
+    handshake_response = md5(key).digest()
+    handshake_reply = (
+        "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
+        "Upgrade: WebSocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Origin: %s\r\n"
+        "Sec-WebSocket-Protocol: %s\r\n"
+        "Sec-WebSocket-Location: %s\r\n" % (
+            request.META.get('HTTP_ORIGIN'),
+            request.META.get('HTTP_SEC_WEBSOCKET_PROTOCOL', 'default'),
+            location))
+    handshake_reply = str(handshake_reply)
+    handshake_reply = '%s\r\n%s' % (handshake_reply, handshake_response)
+    return handshake_reply
+
+def make_version_75_handshake_replay(request):
+    location = 'ws://%s%s' % (request.get_host(), request.path)
+    qs = request.META.get('QUERY_STRING')
+    if qs:location += '?' + qs
+    handshake_reply = (
+    "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
+    "Upgrade: WebSocket\r\n"
+    "Connection: Upgrade\r\n"
+    "WebSocket-Origin: %s\r\n"
+    "WebSocket-Location: %s\r\n\r\n" % (
+        request.META.get('HTTP_ORIGIN'),
+        location))
+    return handshake_reply
+
+def make_version_rfc6455_handshake_replay(request):
+    location = 'ws://%s%s' % (request.get_host(), request.path)
+    qs = request.META.get('QUERY_STRING')
+    if qs:location += '?' + qs
+    key = request.META['HTTP_SEC_WEBSOCKET_KEY']
+    #Create hand shake response for that is after version 07 
+    handshake_response = base64.b64encode(sha1(key.encode("utf-8")+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11".encode("utf-8")).digest()) 
+    handshake_reply = (
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Accept: %s\r\n\r\n" % handshake_response
+    )
+    return str(handshake_reply)
+
 
 def setup_websocket(request):
-    if request.META.get('HTTP_CONNECTION', None) == 'Upgrade' and \
-        request.META.get('HTTP_UPGRADE', None) == 'WebSocket':
-
-        # See if they sent the new-format headers
-        if 'HTTP_SEC_WEBSOCKET_KEY1' in request.META:
-            protocol_version = 76
-            if 'HTTP_SEC_WEBSOCKET_KEY2' not in request.META:
-                raise MalformedWebSocket()
-        else:
-            protocol_version = 75
-
-        # If it's new-version, we need to work out our challenge response
-        if protocol_version == 76:
-            key1 = _extract_number(request.META['HTTP_SEC_WEBSOCKET_KEY1'])
-            key2 = _extract_number(request.META['HTTP_SEC_WEBSOCKET_KEY2'])
-            # There's no content-length header in the request, but it has 8
-            # bytes of data.
-            key3 = request.META['wsgi.input'].read(8)
-            key = struct.pack(">II", key1, key2) + key3
-            handshake_response = md5(key).digest()
-
-        location = 'ws://%s%s' % (request.get_host(), request.path)
-        qs = request.META.get('QUERY_STRING')
-        if qs:
-            location += '?' + qs
-        if protocol_version == 75:
-            handshake_reply = (
-                "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
-                "Upgrade: WebSocket\r\n"
-                "Connection: Upgrade\r\n"
-                "WebSocket-Origin: %s\r\n"
-                "WebSocket-Location: %s\r\n\r\n" % (
-                    request.META.get('HTTP_ORIGIN'),
-                    location))
-        elif protocol_version == 76:
-            handshake_reply = (
-                "HTTP/1.1 101 Web Socket Protocol Handshake\r\n"
-                "Upgrade: WebSocket\r\n"
-                "Connection: Upgrade\r\n"
-                "Sec-WebSocket-Origin: %s\r\n"
-                "Sec-WebSocket-Protocol: %s\r\n"
-                "Sec-WebSocket-Location: %s\r\n" % (
-                    request.META.get('HTTP_ORIGIN'),
-                    request.META.get('HTTP_SEC_WEBSOCKET_PROTOCOL', 'default'),
-                    location))
-            handshake_reply = str(handshake_reply)
-            handshake_reply = '%s\r\n%s' % (handshake_reply, handshake_response)
-
-        else:
-            raise MalformedWebSocket("Unknown WebSocket protocol version.")
-        socket = request.META['wsgi.input']._sock.dup()
-        return WebSocket(
-            socket,
-            protocol=request.META.get('HTTP_WEBSOCKET_PROTOCOL'),
-            version=protocol_version,
-            handshake_reply=handshake_reply,
-        )
-    return None
+    if not is_websocket(request):
+        return None
+    protocol_version = get_websocket_version(request)
+    if protocol_version == 75:
+        handshake_reply = make_version_75_handshake_replay(request)
+    elif protocol_version == 76:
+        handshake_reply = make_version_76_handshake_replay(request)
+    else:
+        handshake_reply = make_version_rfc6455_handshake_replay(request)
+    socket = request.META['wsgi.input']._sock.dup()
+    return WebSocket(
+        socket,
+        protocol=request.META.get('HTTP_WEBSOCKET_PROTOCOL'),
+        version=protocol_version,
+        handshake_reply=handshake_reply,
+    )
 
 
 class WebSocket(object):
@@ -136,7 +165,7 @@ class WebSocket(object):
         self._handshake_sent = True
 
     @classmethod
-    def _pack_message(cls, message):
+    def _pack_message(cls, version, message):
         """Pack the message inside ``00`` and ``FF``
 
         As per the dataframing section (5.3) for the websocket spec
@@ -145,10 +174,28 @@ class WebSocket(object):
             message = message.encode('utf-8')
         elif not isinstance(message, str):
             message = str(message)
-        packed = "\x00%s\xFF" % message
+        if version in [76,75]:  
+            packed = "\x00%s\xFF" % message
+        if version in [13]:
+            message_length = len(message)
+            if message_length <= 125:
+                #Data length is one byte.
+                hd = "\x81" + struct.pack('B',len(message))
+            elif message_length <= 65535:
+                #Data length is two byte.
+                lbyte=[message_length&65280,message_length&255]
+                hd = "\x81" + struct.pack('B',126)+''.join([struct.pack('B',byte) for byte in lbyte])
+            else:
+                #Data length is four byte.
+                mask_bytes=range(1.9).reverse()
+                mask_bytes.pop()
+                mask_bytes.append(0)
+                lbyte = [message_length&255*(16**mask_byte) for mask_byte in mask_bytes]
+                hd = "\x81" + struct.pack('B',127)[0]+''.join([struct.pack('B',byte) for byte in lbyte])
+            packed = hd + message
         return packed
-
-    def _parse_message_queue(self):
+    
+    def _parse_message_queue_old(self):
         """ Parses for messages in the buffer *buf*.  It is assumed that
         the buffer contains the start character for a message, but that it
         may contain only part of the rest of the message.
@@ -176,14 +223,75 @@ class WebSocket(object):
                 raise ValueError("Don't understand how to parse this type of message: %r" % buf)
         self._buffer = buf
         return msgs
+    
+    def _parse_message_queue_rfc(self):
+        msgs=[]
+        buf = self._buffer
+        while buf:
+            fin = (ord(buf[0]) & 128) == 128
+            opcode = ord(buf[0]) & 15
+            if opcode == 8:
+                #closing handshake.
+                self.socket.close()
+                self.closed = True
+                break
+            if opcode == 9:
+                #process repuest Ping
+                pong_frame = '0x8A' + buf[1:len(buf)] 
+                self.socket.sendall(pong_frame)
+                break
+            
+            mask = (ord(buf[1]) & 128) == 128
+            # extract length of payload 
+            payload_data_length = ord(buf[1]) & 127
+            offset = 2
+            if payload_data_length == 126:
+                hex=struct.unpack('BB',buf[2:4])
+                payload_data_length=hex[0]*16**2+hex[1]
+                offset += 2
+            elif payload_data_length == 127:
+                hex = struct.unpack('BBBBBBBB',buf[2:10])
+                payload_data_length=0
+                for index in range(0,8):
+                    if index == 7:
+                        index=0
+                    payload_data_length+=hex[index]*16**(8-index)
+                offset += 8
+            # extract mask key
+            if mask:
+                mask_key = buf[offset:offset+4]
+                offset += 4
+            # extract data
+            data = buf[offset:offset+payload_data_length]
+            data_str = ''
+            if mask:
+                #unmask
+                for index in range(0,payload_data_length):
+                    one_data=struct.unpack('BB',data[index]+mask_key[index%4])
+                    data_str += chr(one_data[0] ^ one_data[1])
+            buf=buf[offset+payload_data_length:]
+        msgs.append(data_str.decode('utf-8','replace'))         
+        return msgs
+    
+    def _parse_message_queue(self):
+        """ Parses for messages in the buffer *buf*.  It is assumed that
+        the buffer contains the start character for a message, but that it
+        may contain only part of the rest of the message.
 
+        Returns an array of messages, and the buffer remainder that
+        didn't contain any full messages."""
+        if self.version == 13:
+            return self._parse_message_queue_rfc()
+        return self._parse_message_queue_old()
+    
     def send(self, message):
         '''
         Send a message to the client. *message* should be convertable to a
         string; unicode objects should be encodable as utf-8.
         '''
-        packed = self._pack_message(message)
-        self.socket.sendall(packed)
+        if not self.closed:
+            packed = self._pack_message(self.version, message)
+            self.socket.sendall(packed)
 
     def _socket_recv(self):
         '''
@@ -283,6 +391,8 @@ class WebSocket(object):
                 if not ignore_send_errors:
                     raise
             self.closed = True
+        elif self.version== 13:
+            pass
 
     def close(self):
         '''
