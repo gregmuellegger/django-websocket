@@ -92,8 +92,8 @@ def make_version_rfc6455_handshake_replay(request):
     qs = request.META.get('QUERY_STRING')
     if qs:location += '?' + qs
     key = request.META['HTTP_SEC_WEBSOCKET_KEY']
-    #Create hand shake response for that is after version 07 
-    handshake_response = base64.b64encode(sha1(key.encode("utf-8")+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11".encode("utf-8")).digest()) 
+    #Create hand shake response for that is after version 07
+    handshake_response = base64.b64encode(sha1(key.encode("utf-8")+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11".encode("utf-8")).digest())
     handshake_reply = (
     "HTTP/1.1 101 Switching Protocols\r\n"
     "Upgrade: websocket\r\n"
@@ -113,7 +113,10 @@ def setup_websocket(request):
         handshake_reply = make_version_76_handshake_replay(request)
     else:
         handshake_reply = make_version_rfc6455_handshake_replay(request)
-    socket = request.META['wsgi.input']._sock.dup()
+    if 'gunicorn.socket' in request.META:
+        socket = request.META['gunicorn.socket']
+    else:
+        socket = request.META['wsgi.input']._sock.dup()
     return WebSocket(
         socket,
         protocol=request.META.get('HTTP_WEBSOCKET_PROTOCOL'),
@@ -174,7 +177,7 @@ class WebSocket(object):
             message = message.encode('utf-8')
         elif not isinstance(message, str):
             message = str(message)
-        if version in [76,75]:  
+        if version in [76,75]:
             packed = "\x00%s\xFF" % message
         if version in [13]:
             message_length = len(message)
@@ -194,7 +197,7 @@ class WebSocket(object):
                 hd = "\x81" + struct.pack('B',127)[0]+''.join([struct.pack('B',byte) for byte in lbyte])
             packed = hd + message
         return packed
-    
+
     def _parse_message_queue_old(self):
         """ Parses for messages in the buffer *buf*.  It is assumed that
         the buffer contains the start character for a message, but that it
@@ -223,7 +226,7 @@ class WebSocket(object):
                 raise ValueError("Don't understand how to parse this type of message: %r" % buf)
         self._buffer = buf
         return msgs
-    
+
     def _parse_message_queue_rfc(self):
         msgs=[]
         buf = self._buffer
@@ -237,12 +240,12 @@ class WebSocket(object):
                 break
             if opcode == 9:
                 #process repuest Ping
-                pong_frame = '0x8A' + buf[1:len(buf)] 
+                pong_frame = '0x8A' + buf[1:len(buf)]
                 self.socket.sendall(pong_frame)
                 break
-            
+
             mask = (ord(buf[1]) & 128) == 128
-            # extract length of payload 
+            # extract length of payload
             payload_data_length = ord(buf[1]) & 127
             offset = 2
             if payload_data_length == 126:
@@ -270,9 +273,9 @@ class WebSocket(object):
                     one_data=struct.unpack('BB',data[index]+mask_key[index%4])
                     data_str += chr(one_data[0] ^ one_data[1])
             buf=buf[offset+payload_data_length:]
-        msgs.append(data_str.decode('utf-8','replace'))         
+        msgs.append(data_str.decode('utf-8','replace'))
         return msgs
-    
+
     def _parse_message_queue(self):
         """ Parses for messages in the buffer *buf*.  It is assumed that
         the buffer contains the start character for a message, but that it
@@ -283,7 +286,7 @@ class WebSocket(object):
         if self.version == 13:
             return self._parse_message_queue_rfc()
         return self._parse_message_queue_old()
-    
+
     def send(self, message):
         '''
         Send a message to the client. *message* should be convertable to a
