@@ -114,9 +114,13 @@ def setup_websocket(request):
     else:
         handshake_reply = make_version_rfc6455_handshake_replay(request)
     if 'gunicorn.socket' in request.META:
-        socket = request.META['gunicorn.socket']
+        socket = request.META['gunicorn.socket'].dup()
     else:
-        socket = request.META['wsgi.input']._sock.dup()
+        socket = getattr(
+            request.META['wsgi.input'],
+            '_sock',
+            request.META['wsgi.input'].rfile._sock
+        ).dup()
     return WebSocket(
         socket,
         protocol=request.META.get('HTTP_WEBSOCKET_PROTOCOL'),
