@@ -119,8 +119,11 @@ def setup_websocket(request):
         socket = getattr(
             request.META['wsgi.input'],
             '_sock',
+            None,
+        )
+        if not socket:
             request.META['wsgi.input'].rfile._sock
-        ).dup()
+        socket = socket.dup()
     return WebSocket(
         socket,
         protocol=request.META.get('HTTP_WEBSOCKET_PROTOCOL'),
