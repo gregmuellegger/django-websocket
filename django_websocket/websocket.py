@@ -122,7 +122,7 @@ def setup_websocket(request):
             None,
         )
         if not socket:
-            request.META['wsgi.input'].rfile._sock
+            socket = request.META['wsgi.input'].rfile._sock
         socket = socket.dup()
     return WebSocket(
         socket,
