@@ -280,7 +280,7 @@ class WebSocket(object):
                     one_data=struct.unpack('BB',data[index]+mask_key[index%4])
                     data_str += chr(one_data[0] ^ one_data[1])
             buf=buf[offset+payload_data_length:]
-        msgs.append(data_str.decode('utf-8','replace'))
+            msgs.append(data_str.decode('utf-8','replace'))
         return msgs
 
     def _parse_message_queue(self):
