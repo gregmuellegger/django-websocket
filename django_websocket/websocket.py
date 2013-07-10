@@ -402,7 +402,9 @@ class WebSocket(object):
                     raise
             self.closed = True
         elif self.version== 13:
-            pass
+            self.closed= True
+            self._message_queue.extend('')
+
 
     def close(self):
         '''
