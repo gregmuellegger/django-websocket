@@ -1,1 +1,1 @@
-from django_websocket.decorators import *
+from .decorators import *
