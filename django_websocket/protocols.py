@@ -150,27 +150,11 @@ class WebSocketProtocol(object):
     STATUS_UNEXPECTED_CONDITION = 1011
     STATUS_TLS_HANDSHAKE_ERROR = 1015
 
-    def __init__(self, sock, handshake_reply=None, get_mask_key=None):
+    def __init__(self, sock, handshake_reply=None, mask_outgoing=False):
         self.sock = sock
         self.closed = False
-        self.get_mask_key = get_mask_key
         self.handshake_reply = handshake_reply
-
-    def send(self, payload, opcode=ABNF.OPCODE_TEXT):
-        """
-        Send the data as string.
-
-        payload: Payload must be utf-8 string or unicoce,
-                  if the opcode is OPCODE_TEXT.
-                  Otherwise, it must be string(byte array)
-        """
-        frame = ABNF.create_frame(payload, opcode)
-        if self.get_mask_key:
-            frame.get_mask_key = self.get_mask_key
-        data = frame.format()
-        while data:
-            l = self.sock.send(data)
-            data = data[l:]
+        self.mask_outgoing = mask_outgoing
 
     def recv(self):
         """
@@ -292,11 +276,47 @@ class WebSocketProtocol(object):
         r, w, e = [self.sock], [], []
         try:
             r, w, e = select.select(r, w, e, timeout)
-        except select.error, err:
+        except select.error as err:
             if err.args[0] == EINTR:
                 return False
             raise
         return self.sock in r
+
+    def _write_frame(self, fin, opcode, data):
+        if fin:
+            finbit = 0x80
+        else:
+            finbit = 0
+        frame = struct.pack("B", finbit | opcode)
+        l = len(data)
+        if self.mask_outgoing:
+            mask_bit = 0x80
+        else:
+            mask_bit = 0
+        if l < 126:
+            frame += struct.pack("B", l | mask_bit)
+        elif l <= 0xFFFF:
+            frame += struct.pack("!BH", 126 | mask_bit, l)
+        else:
+            frame += struct.pack("!BQ", 127 | mask_bit, l)
+        if self.mask_outgoing:
+            mask = os.urandom(4)
+            data = mask + self._apply_mask(mask, data)
+        frame += data
+        self.sock.send(frame)
+
+    def send(self, message, binary=False):
+        """Sends the given message to the client of this Web Socket."""
+        if binary:
+            opcode = 0x2
+        else:
+            opcode = 0x1
+        message = message.encode('utf8')
+        try:
+            self._write_frame(True, opcode, message)
+        except IOError as e:
+            logger.debug(e)
+            self.close()
 
     def close(self):
         self.closed = True

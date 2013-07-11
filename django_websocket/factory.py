@@ -1,12 +1,11 @@
+import logging
 import collections
 import base64
-import select
-import string
-import struct
-from hashlib import md5, sha1
-from errno import EINTR
-from socket import error as SocketError
+from hashlib import sha1
 from .protocols import WebSocketProtocol
+
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketFactory(object):
@@ -21,8 +20,6 @@ class WebSocketFactory(object):
     def is_websocket(self):
         """check the websocket"""
         if self.request.META.get(
-            'HTTP_CONNECTION', ""
-        ).lower() == 'upgrade' and self.request.META.get(
             'HTTP_UPGRADE', ""
         ).lower() == 'websocket':
             return True
