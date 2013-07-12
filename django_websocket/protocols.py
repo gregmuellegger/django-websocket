@@ -75,21 +75,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         _, data = self.read_data()
         return data
 
-    def ping(self, payload=""):
-        """
-        write ping data.
 
-        payload: data payload to write server.
-        """
-        self.write(payload, self.OPCODE_PING)
-
-    def pong(self, payload):
-        """
-        write pong data.
-
-        payload: data payload to write server.
-        """
-        self.write(payload, self.OPCODE_PONG)
 
     @classmethod
     def mask_or_unmask(cls, mask_key, data):
@@ -131,7 +117,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
                 self.close()
                 return (opcode, None)
             elif opcode == self.OPCODE_PING:
-                self.pong(data)
+                self.write_pong(data)
 
     def read_frame(self):
         """
@@ -173,15 +159,6 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             remaining = bufsize - len(_bytes)
 
         return _bytes
-
-    def write_close(self, status=STATUS_NORMAL, reason=""):
-        """
-        write close data to the server.
-        reason: the reason to close. This must be string.
-        """
-        if status < 0 or status >= self.LENGTH_16:
-            raise ValueError("code is invalid range")
-        self.write(struct.pack('!H', status) + reason, self.OPCODE_CLOSE)
 
     @classmethod
     def select_subprotocol(cls, subprotocols):
@@ -275,6 +252,31 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         except IOError as e:
             logger.debug(e)
             self.close()
+
+    def write_ping(self, payload=""):
+        """
+        write ping data.
+
+        payload: data payload to write server.
+        """
+        self.write(payload, self.OPCODE_PING)
+
+    def write_pong(self, payload):
+        """
+        write pong data.
+
+        payload: data payload to write server.
+        """
+        self.write(payload, self.OPCODE_PONG)
+
+    def write_close(self, status=STATUS_NORMAL, reason=""):
+        """
+        write close data to the server.
+        reason: the reason to close. This must be string.
+        """
+        if status < 0 or status >= self.LENGTH_16:
+            raise ValueError("code is invalid range")
+        self.write(struct.pack('!H', status) + reason, self.OPCODE_CLOSE)
 
     def close(self):
         self.closed = True
