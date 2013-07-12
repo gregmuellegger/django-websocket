@@ -92,6 +92,20 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             _d[i] ^= _m[i % 4]
         return _d.tostring()
 
+    @classmethod
+    def select_subprotocol(cls, subprotocols):
+        pass
+
+    @classmethod
+    def compute_accept_value(cls, key):
+        """Computes the value for the Sec-WebSocket-Accept header,
+        given the value for Sec-WebSocket-Key.
+        """
+        sha1 = hashlib.sha1()
+        sha1.update(key)
+        sha1.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11")  # Magic value
+        return base64.b64encode(sha1.digest())
+
     def read_data(self):
         """
         Recieve data with operation code.
@@ -160,19 +174,6 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return _bytes
 
-    @classmethod
-    def select_subprotocol(cls, subprotocols):
-        pass
-
-    @classmethod
-    def compute_accept_value(cls, key):
-        """Computes the value for the Sec-WebSocket-Accept header,
-        given the value for Sec-WebSocket-Key.
-        """
-        sha1 = hashlib.sha1()
-        sha1.update(key)
-        sha1.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11")  # Magic value
-        return base64.b64encode(sha1.digest())
 
     def accept_connection(self):
         fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
