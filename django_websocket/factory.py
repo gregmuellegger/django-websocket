@@ -1,7 +1,5 @@
 import logging
 import collections
-import base64
-from hashlib import sha1
 from .protocols import WebSocketProtocol
 
 
@@ -37,55 +35,16 @@ class WebSocketFactory(object):
             protocol_version = 75
         return protocol_version
 
-    def create_handshake_replay(self):
-        key = self.request.META['HTTP_SEC_WEBSOCKET_KEY']
-        #Create hand shake response for that is after version 07
-        handshake_response = base64.b64encode(
-            sha1(
-                key.encode(
-                    "utf-8"
-                )+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11".encode("utf-8")
-            ).digest()
-        )
-        handshake_reply = (
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Accept: %s\r\n\r\n" % handshake_response
-        )
-        return str(handshake_reply)
-
-    def get_request_sock(self):
-        try:
-            if 'gunicorn.socket' in self.request.META:
-                sock = self.request.META['gunicorn.socket'].dup()
-            else:
-                sock = getattr(
-                    self.request.META['wsgi.input'],
-                    '_sock',
-                    None,
-                )
-                if not sock:
-                    sock = self.request.META['wsgi.input'].rfile._sock
-            sock = sock.dup()
-            return sock
-        except AttributeError as e:
-            logger.exception(e)
-            return None
-
     def create_websocket(self):
         if not self.is_websocket():
             return None
-        sock = self.get_request_sock()
-        if sock:
-            try:
-                protocol = self.mapping[self.version()](
-                    sock,
-                    self.create_handshake_replay()
-                )
-                return WebSocket(protocol=protocol)
-            except KeyError as e:
-                logger.exception(e)
+        try:
+            protocol = self.mapping[self.version()](
+                self.request
+            )
+            return WebSocket(protocol=protocol)
+        except KeyError as e:
+            logger.exception(e)
         return None
 
 
@@ -116,8 +75,8 @@ class WebSocket(object):
         self.closed = False
         self._message_queue = collections.deque()
 
-    def send_handshake(self):
-        self.protocol.send_handshake_replay()
+    def accept_connection(self):
+        self.protocol.accept_connection()
 
     def send(self, message):
         '''
@@ -125,12 +84,12 @@ class WebSocket(object):
         string; unicode objects should be encodable as utf-8.
         '''
         if not self.closed:
-            self.protocol.send(message)
+            self.protocol.write(message)
 
     def _get_new_messages(self):
         # read as long from socket as we need to get a new message.
-        while self.protocol.can_recv():
-            self._message_queue.append(self.protocol.recv())
+        while self.protocol.can_read():
+            self._message_queue.append(self.protocol.read())
             if self._message_queue:
                 return
 
@@ -171,7 +130,7 @@ class WebSocket(object):
             if self.closed:
                 return None
             # no parsed messages, must mean buf needs more data
-            new_data = self.protocol.recv()
+            new_data = self.protocol.read()
             if not new_data:
                 return None
             self._message_queue.append(new_data)

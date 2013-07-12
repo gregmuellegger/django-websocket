@@ -5,13 +5,40 @@ import logging
 import struct
 import select
 import socket
+import hashlib
+import base64
 from errno import EINTR
 
 
 logger = logging.getLogger(__name__)
 
 
-class WebSocketProtocol(object):
+class BaseWebSocketProtocol(object):
+
+    def __init__(self, request):
+        self.request = request
+
+    @property
+    def sock(self):
+        try:
+            if 'gunicorn.socket' in self.request.META:
+                sock = self.request.META['gunicorn.socket'].dup()
+            else:
+                sock = getattr(
+                    self.request.META['wsgi.input'],
+                    '_sock',
+                    None,
+                )
+                if not sock:
+                    sock = self.request.META['wsgi.input'].rfile._sock
+            sock = sock.dup()
+            return sock
+        except AttributeError as e:
+            logger.exception(e)
+            return None
+
+
+class WebSocketProtocol(BaseWebSocketProtocol):
 
     LENGTH_7 = 0x7d
     LENGTH_16 = 1 << 16
@@ -34,36 +61,35 @@ class WebSocketProtocol(object):
     STATUS_UNEXPECTED_CONDITION = 1011
     STATUS_TLS_HANDSHAKE_ERROR = 1015
 
-    def __init__(self, sock, handshake_reply=None, mask_outgoing=False):
-        self.sock = sock
+    def __init__(self, request, mask_outgoing=False):
+        BaseWebSocketProtocol.__init__(self, request)
         self.closed = False
-        self.handshake_reply = handshake_reply
         self.mask_outgoing = mask_outgoing
 
-    def recv(self):
+    def read(self):
         """
         Receive string data(byte array) from the server.
 
         return value: string(byte array) value.
         """
-        _, data = self.recv_data()
+        _, data = self.read_data()
         return data
 
     def ping(self, payload=""):
         """
-        send ping data.
+        write ping data.
 
-        payload: data payload to send server.
+        payload: data payload to write server.
         """
-        self.send(payload, self.OPCODE_PING)
+        self.write(payload, self.OPCODE_PING)
 
     def pong(self, payload):
         """
-        send pong data.
+        write pong data.
 
-        payload: data payload to send server.
+        payload: data payload to write server.
         """
-        self.send(payload, self.OPCODE_PONG)
+        self.write(payload, self.OPCODE_PONG)
 
     @classmethod
     def mask_or_unmask(cls, mask_key, data):
@@ -80,19 +106,22 @@ class WebSocketProtocol(object):
             _d[i] ^= _m[i % 4]
         return _d.tostring()
 
-    def recv_data(self):
+    def read_data(self):
         """
         Recieve data with operation code.
 
         return  value: tuple of operation code and string(byte array) value.
         """
         while True:
-            fin, opcode, data = self.recv_frame()
+            fin, opcode, data = self.read_frame()
             if not fin and not opcode and not data:
                 # handle error:
                 # 'NoneType' object has no attribute 'opcode'
                 raise ValueError(
-                    "Not a valid fin %s opcode %s data %s" % (fin, opcode, data))
+                    "Not a valid fin %s opcode %s data %s" % (
+                        fin, opcode, data
+                    )
+                )
             elif opcode in (
                 self.OPCODE_TEXT,
                 self.OPCODE_BINARY
@@ -104,11 +133,11 @@ class WebSocketProtocol(object):
             elif opcode == self.OPCODE_PING:
                 self.pong(data)
 
-    def recv_frame(self):
+    def read_frame(self):
         """
         recieve data as frame from server.
         """
-        header_bytes = self._recv_strict(2)
+        header_bytes = self._read_strict(2)
         if not header_bytes:
             return None, None, None
         b1 = ord(header_bytes[0])
@@ -120,20 +149,20 @@ class WebSocketProtocol(object):
 
         length_data = ""
         if length == 0x7e:
-            length_data = self._recv_strict(2)
+            length_data = self._read_strict(2)
             length = struct.unpack("!H", length_data)[0]
         elif length == 0x7f:
-            length_data = self._recv_strict(8)
+            length_data = self._read_strict(8)
             length = struct.unpack("!Q", length_data)[0]
         mask_key = ""
         if mask:
-            mask_key = self._recv_strict(4)
-        data = self._recv_strict(length)
+            mask_key = self._read_strict(4)
+        data = self._read_strict(length)
         if mask:
             data = self.mask_or_unmask(mask_key, data)
         return fin, opcode, data
 
-    def _recv_strict(self, bufsize):
+    def _read_strict(self, bufsize):
         remaining = bufsize
         _bytes = ""
         while remaining:
@@ -145,20 +174,60 @@ class WebSocketProtocol(object):
 
         return _bytes
 
-    def send_close(self, status=STATUS_NORMAL, reason=""):
+    def write_close(self, status=STATUS_NORMAL, reason=""):
         """
-        send close data to the server.
+        write close data to the server.
         reason: the reason to close. This must be string.
         """
         if status < 0 or status >= self.LENGTH_16:
             raise ValueError("code is invalid range")
-        self.send(struct.pack('!H', status) + reason, self.OPCODE_CLOSE)
+        self.write(struct.pack('!H', status) + reason, self.OPCODE_CLOSE)
 
-    def send_handshake_replay(self):
-        if self.handshake_reply:
-            self.sock.sendall(self.handshake_reply)
+    @classmethod
+    def select_subprotocol(cls, subprotocols):
+        pass
 
-    def can_recv(self, timeout=0.0):
+    @classmethod
+    def compute_accept_value(cls, key):
+        """Computes the value for the Sec-WebSocket-Accept header,
+        given the value for Sec-WebSocket-Key.
+        """
+        sha1 = hashlib.sha1()
+        sha1.update(key)
+        sha1.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11")  # Magic value
+        return base64.b64encode(sha1.digest())
+
+    def accept_connection(self):
+        fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
+        if not all(map(self.request.META.get, fields)):
+            raise ValueError("Missing/Invalid WebSocket headers")
+
+        subprotocol_header = ''
+        subprotocols = self.request.META.get("HTTP_SEC_WEBSOCKET_PROTOCOL", '')
+        subprotocols = [s.strip() for s in subprotocols.split(',')]
+        if subprotocols:
+            selected = self.select_subprotocol(subprotocols)
+            if selected:
+                assert selected in subprotocols
+                subprotocol_header = (
+                    "Sec-WebSocket-Protocol: %s\r\n" % selected
+                )
+        accept_header = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Accept: %s\r\n"
+            "%s"
+            "\r\n" % (
+                self.compute_accept_value(
+                    self.request.META.get("HTTP_SEC_WEBSOCKET_KEY")
+                ), 
+                subprotocol_header
+            )
+        )
+        self.sock.send(accept_header)
+
+    def can_read(self, timeout=0.0):
         '''
         Return ``True`` if new data can be read from the socket.
         '''
@@ -194,7 +263,7 @@ class WebSocketProtocol(object):
         frame += data
         self.sock.send(frame)
 
-    def send(self, message, binary=False):
+    def write(self, message, binary=False):
         """Sends the given message to the client of this Web Socket."""
         if binary:
             opcode = 0x2

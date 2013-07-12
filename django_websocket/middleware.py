@@ -33,7 +33,7 @@ class WebSocketMiddleware(object):
                 not getattr(view_func, 'accept_websocket', False):
                 return HttpResponseBadRequest()
             # everything is fine .. so prepare connection by sending handshake
-            request.websocket.send_handshake()
+            request.websocket.accept_connection()
         elif getattr(view_func, 'require_websocket', False):
             # websocket was required but not provided
             return HttpResponseBadRequest()
@@ -41,5 +41,5 @@ class WebSocketMiddleware(object):
     @classmethod
     def process_response(cls, request, response):
         if request.is_websocket():
-            request.websocket.protocol.sock.close()
+            request.websocket.protocol.close()
         return response
