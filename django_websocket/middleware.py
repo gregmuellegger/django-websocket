@@ -41,5 +41,5 @@ class WebSocketMiddleware(object):
     @classmethod
     def process_response(cls, request, response):
         if request.is_websocket():
-            request.websocket.protocol.close()
+            request.websocket.close()
         return response
