@@ -289,7 +289,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         self.sock.close()  # forcibly tear down the connection
 
     def close(self):
-        if not server_terminated:
+        if not self.server_terminated:
             self.write_close()
             self.abort()
         else:
