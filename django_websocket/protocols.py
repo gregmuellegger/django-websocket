@@ -63,8 +63,8 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
     def __init__(self, request, mask_outgoing=False):
         BaseWebSocketProtocol.__init__(self, request)
-        self.closed = False
         self.mask_outgoing = mask_outgoing
+        self.closed = False
 
     def read(self):
         """
@@ -272,12 +272,10 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         write close data to the server.
         reason: the reason to close. This must be string.
         """
-        try:
-            self._write_frame(True, 0x8, reason)
-        except socket.error as e:
-            logger.debug(e)
+        self._write_frame(True, 0x8, reason)
 
     def close(self):
-        self.write_close()
-        self.closed = True
-        self.sock.close()
+        if not self.closed:
+            self.write_close()
+            self.sock.close()
+            self.closed = True

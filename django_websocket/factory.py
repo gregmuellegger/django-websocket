@@ -151,5 +151,6 @@ class WebSocket(object):
         '''
         Forcibly close the websocket.
         '''
-        self.closed = True
-        self.protocol.close()
+        if not self.closed:
+            self.protocol.close()
+            self.closed = True
