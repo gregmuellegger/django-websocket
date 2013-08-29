@@ -31,7 +31,6 @@ class BaseWebSocketProtocol(object):
                     sock = wsgi_input.rfile._sock
                 else:
                     raise ValueError('Socket not found in wsgi.input')
-            sock = sock.dup()
             return sock
         except AttributeError as e:
             logger.exception(e)
@@ -129,7 +128,8 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             ):
                 return (opcode, data)
             elif opcode == self.OPCODE_CLOSE:
-                self.close()
+                self.write_close()
+                self.abort()
                 return (opcode, None)
             elif opcode == self.OPCODE_PING:
                 self.write_pong(data)

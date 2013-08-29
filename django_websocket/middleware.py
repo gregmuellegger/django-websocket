@@ -43,3 +43,8 @@ class WebSocketMiddleware(object):
         if request.is_websocket():
             request.websocket.close()
         return response
+
+    @classmethod
+    def process_exception(cls, request, exception):
+        if request.is_websocket():
+            request.websocket.close()
