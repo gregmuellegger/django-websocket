@@ -72,8 +72,11 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return value: string(byte array) value.
         """
-        _, data = self.read_data()
-        return data
+        try:
+            _, data = self.read_data()
+            return data
+        except BaseException:
+            self.abort()
 
     @classmethod
     def mask_or_unmask(cls, mask_key, data):
@@ -110,7 +113,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return  value: tuple of operation code and string(byte array) value.
         """
-        while True:
+        while not self.closed:
             fin, opcode, data = self.read_frame()
             if not fin and not opcode and not data:
                 # handle error:
@@ -173,34 +176,38 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         return _bytes
 
     def accept_connection(self):
-        fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
-        if not all(map(self.request.META.get, fields)):
-            raise ValueError("Missing/Invalid WebSocket headers")
+        try:
+            fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
+            if not all(map(self.request.META.get, fields)):
+                raise ValueError("Missing/Invalid WebSocket headers")
 
-        subprotocol_header = ''
-        subprotocols = self.request.META.get("HTTP_SEC_WEBSOCKET_PROTOCOL", '')
-        subprotocols = [s.strip() for s in subprotocols.split(',')]
-        if subprotocols:
-            selected = self.select_subprotocol(subprotocols)
-            if selected:
-                assert selected in subprotocols
-                subprotocol_header = (
-                    "Sec-WebSocket-Protocol: %s\r\n" % selected
+            subprotocol_header = ''
+            subprotocols = self.request.META.get(
+                "HTTP_SEC_WEBSOCKET_PROTOCOL", '')
+            subprotocols = [s.strip() for s in subprotocols.split(',')]
+            if subprotocols:
+                selected = self.select_subprotocol(subprotocols)
+                if selected:
+                    assert selected in subprotocols
+                    subprotocol_header = (
+                        "Sec-WebSocket-Protocol: %s\r\n" % selected
+                    )
+            accept_header = (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Accept: %s\r\n"
+                "%s"
+                "\r\n" % (
+                    self.compute_accept_value(
+                        self.request.META.get("HTTP_SEC_WEBSOCKET_KEY")
+                    ),
+                    subprotocol_header
                 )
-        accept_header = (
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Accept: %s\r\n"
-            "%s"
-            "\r\n" % (
-                self.compute_accept_value(
-                    self.request.META.get("HTTP_SEC_WEBSOCKET_KEY")
-                ),
-                subprotocol_header
             )
-        )
-        self.sock.send(accept_header)
+            self.sock.send(accept_header)
+        except BaseException:
+            self.abort()
 
     def can_read(self, timeout=0.0):
         '''
@@ -212,7 +219,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         except select.error as err:
             if err.args[0] == EINTR:
                 return False
-            raise
+            raise err
         return self.sock in r
 
     def _write_frame(self, fin, opcode, data):
@@ -249,7 +256,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             self._write_frame(True, opcode, message)
         except IOError as e:
             logger.debug(e)
-            self.close()
+            self.abort()
 
     def write_ping(self, payload=""):
         """
@@ -274,8 +281,12 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         """
         self._write_frame(True, 0x8, reason)
 
+    def abort(self):
+        """Instantly aborts the WebSocket connection by closing the socket"""
+        self.closed = True
+        self.sock.close()  # forcibly tear down the connection
+
     def close(self):
         if not self.closed:
             self.write_close()
-            self.sock.close()
-            self.closed = True
+            self.abort()
