@@ -113,7 +113,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return  value: tuple of operation code and string(byte array) value.
         """
-        while not self.server_terminated and not client_terminated:
+        while not self.server_terminated and not self.client_terminated:
             fin, opcode, data = self.read_frame()
             if not fin and not opcode and not data:
                 # handle error:
