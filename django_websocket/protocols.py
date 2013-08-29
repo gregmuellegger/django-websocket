@@ -63,7 +63,8 @@ class WebSocketProtocol(BaseWebSocketProtocol):
     def __init__(self, request, mask_outgoing=False):
         BaseWebSocketProtocol.__init__(self, request)
         self.mask_outgoing = mask_outgoing
-        self.closed = False
+        self.server_terminated = False
+        self.client_terminated = False
 
     def read(self):
         """
@@ -112,7 +113,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return  value: tuple of operation code and string(byte array) value.
         """
-        while not self.closed:
+        while not self.server_terminated and not client_terminated:
             fin, opcode, data = self.read_frame()
             if not fin and not opcode and not data:
                 # handle error:
@@ -128,8 +129,8 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             ):
                 return (opcode, data)
             elif opcode == self.OPCODE_CLOSE:
-                self.write_close()
-                self.abort()
+                self.client_terminated = True
+                self.close()
                 return (opcode, None)
             elif opcode == self.OPCODE_PING:
                 self.write_pong(data)
@@ -283,10 +284,13 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
     def abort(self):
         """Instantly aborts the WebSocket connection by closing the socket"""
-        self.closed = True
+        self.server_terminated = True
+        self.client_terminated = True
         self.sock.close()  # forcibly tear down the connection
 
     def close(self):
-        if not self.closed:
+        if not server_terminated:
             self.write_close()
+            self.abort()
+        else:
             self.abort()
