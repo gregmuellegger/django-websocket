@@ -259,23 +259,25 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         """
         self.write(payload, self.OPCODE_PING)
 
-    def write_pong(self, payload):
+    def write_pong(self, data):
         """
         write pong data.
 
         payload: data payload to write server.
         """
-        self.write(payload, self.OPCODE_PONG)
+        self.write(data, self.OPCODE_PONG)
 
-    def write_close(self, status=STATUS_NORMAL, reason=""):
+    def write_close(self, reason=u""):
         """
         write close data to the server.
         reason: the reason to close. This must be string.
         """
-        if status < 0 or status >= self.LENGTH_16:
-            raise ValueError("code is invalid range")
-        self.write(struct.pack('!H', status) + reason, self.OPCODE_CLOSE)
+        try:
+            self._write_frame(True, 0x8, reason)
+        except socket.error as e:
+            logger.debug(e)
 
     def close(self):
+        self.write_close()
         self.closed = True
         self.sock.close()
