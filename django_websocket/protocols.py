@@ -267,7 +267,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         """
         self.write(data, self.OPCODE_PONG)
 
-    def write_close(self, reason=u""):
+    def write_close(self, reason=b""):
         """
         write close data to the server.
         reason: the reason to close. This must be string.
