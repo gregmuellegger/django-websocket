@@ -24,13 +24,13 @@ class BaseWebSocketProtocol(object):
             if 'gunicorn.socket' in self.request.META:
                 sock = self.request.META['gunicorn.socket'].dup()
             else:
-                sock = getattr(
-                    self.request.META['wsgi.input'],
-                    '_sock',
-                    None,
-                )
-                if not sock:
-                    sock = self.request.META['wsgi.input'].rfile._sock
+                wsgi_input = self.request.META['wsgi.input']
+                if hasattr(wsgi_input, '_sock'):
+                    sock = wsgi_input._sock
+                elif hasattr(wsgi_input, 'rfile'):  # gevent
+                    sock = wsgi_input.rfile._sock
+                else:
+                    raise ValueError('Socket not found in wsgi.input')
             sock = sock.dup()
             return sock
         except AttributeError as e:
@@ -74,8 +74,6 @@ class WebSocketProtocol(BaseWebSocketProtocol):
         """
         _, data = self.read_data()
         return data
-
-
 
     @classmethod
     def mask_or_unmask(cls, mask_key, data):
@@ -174,7 +172,6 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         return _bytes
 
-
     def accept_connection(self):
         fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
         if not all(map(self.request.META.get, fields)):
@@ -199,7 +196,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             "\r\n" % (
                 self.compute_accept_value(
                     self.request.META.get("HTTP_SEC_WEBSOCKET_KEY")
-                ), 
+                ),
                 subprotocol_header
             )
         )
