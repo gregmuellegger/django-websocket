@@ -17,21 +17,25 @@ class BaseWebSocketProtocol(object):
 
     def __init__(self, request):
         self.request = request
+        self._sock = None
 
     @property
     def sock(self):
         try:
-            if 'gunicorn.socket' in self.request.META:
-                sock = self.request.META['gunicorn.socket'].dup()
-            else:
-                wsgi_input = self.request.META['wsgi.input']
-                if hasattr(wsgi_input, '_sock'):
-                    sock = wsgi_input._sock
-                elif hasattr(wsgi_input, 'rfile'):  # gevent
-                    sock = wsgi_input.rfile._sock
+            if not self._sock:
+                if 'gunicorn.socket' in self.request.META:
+                    sock = self.request.META['gunicorn.socket'].dup()
                 else:
-                    raise ValueError('Socket not found in wsgi.input')
-            return sock
+                    wsgi_input = self.request.META['wsgi.input']
+                    if hasattr(wsgi_input, '_sock'):
+                        sock = wsgi_input._sock
+                    elif hasattr(wsgi_input, 'rfile'):  # gevent
+                        sock = wsgi_input.rfile._sock
+                    else:
+                        raise ValueError('Socket not found in wsgi.input')
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
+                self._sock = sock
+            return self._sock
         except AttributeError as e:
             logger.exception(e)
             return None
