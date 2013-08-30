@@ -33,7 +33,8 @@ class WebSocketMiddleware(object):
                 not getattr(view_func, 'accept_websocket', False):
                 return HttpResponseBadRequest()
             # everything is fine .. so prepare connection by sending handshake
-            request.websocket.accept_connection()
+            if getattr(view_func, 'required_websocket', False):
+                request.websocket.accept_connection()
         elif getattr(view_func, 'require_websocket', False):
             # websocket was required but not provided
             return HttpResponseBadRequest()
