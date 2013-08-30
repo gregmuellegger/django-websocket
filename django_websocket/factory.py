@@ -154,3 +154,8 @@ class WebSocket(object):
         if not self.closed:
             self.protocol.close()
             self.closed = True
+    
+    def abort(self):
+        if not self.closed:
+            self.protocol.abort()
+            self.closed = True
