@@ -269,7 +269,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         payload: data payload to write server.
         """
-        self.write(payload, self.OPCODE_PING)
+        self._write_frame(True, self.OPCODE_PING, payload)
 
     def write_pong(self, data):
         """
@@ -277,14 +277,14 @@ class WebSocketProtocol(BaseWebSocketProtocol):
 
         payload: data payload to write server.
         """
-        self.write(data, self.OPCODE_PONG)
+        self._write_frame(True, self.OPCODE_PONG, data)
 
     def write_close(self, reason=b""):
         """
         write close data to the server.
         reason: the reason to close. This must be string.
         """
-        self._write_frame(True, 0x8, reason)
+        self._write_frame(True, self.OPCODE_CLOSE, reason)
 
     def abort(self):
         """Instantly aborts the WebSocket connection by closing the socket"""
