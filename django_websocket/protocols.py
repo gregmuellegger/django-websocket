@@ -15,33 +15,28 @@ logger = logging.getLogger(__name__)
 
 class BaseWebSocketProtocol(object):
 
-    def __init__(self, request):
-        self.request = request
-        self._sock = None
+    def __init__(self, sock, headers):
+        self.sock = sock
+        self.headers = headers
 
-    @property
-    def sock(self):
-        try:
-            if not self._sock:
-                if 'gunicorn.socket' in self.request.META:
-                    sock = self.request.META['gunicorn.socket'].dup()
-                else:
-                    wsgi_input = self.request.META['wsgi.input']
-                    if hasattr(wsgi_input, '_sock'):
-                        sock = wsgi_input._sock
-                    elif hasattr(wsgi_input, 'rfile'):  # gevent
-                        sock = wsgi_input.rfile._sock
-                    else:
-                        raise ValueError('Socket not found in wsgi.input')
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  
-                self._sock = sock
-            return self._sock
-        except AttributeError as e:
-            logger.exception(e)
-            return None
+    def accept_connection(self):
+        raise NotImplementedError
+    
+    def write(self, data):
+        raise NotImplementedError
+
+    def read(self):
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
+
+    def abort(self):
+        raise NotImplementedError
 
 
-class WebSocketProtocol(BaseWebSocketProtocol):
+
+class WebSocketProtocol13(BaseWebSocketProtocol):
 
     LENGTH_7 = 0x7d
     LENGTH_16 = 1 << 16
@@ -64,8 +59,8 @@ class WebSocketProtocol(BaseWebSocketProtocol):
     STATUS_UNEXPECTED_CONDITION = 1011
     STATUS_TLS_HANDSHAKE_ERROR = 1015
 
-    def __init__(self, request, mask_outgoing=False):
-        BaseWebSocketProtocol.__init__(self, request)
+    def __init__(self, sock, headers, mask_outgoing=False):
+        BaseWebSocketProtocol.__init__(self, sock, headers)
         self.mask_outgoing = mask_outgoing
         self.server_terminated = False
         self.client_terminated = False
@@ -183,11 +178,11 @@ class WebSocketProtocol(BaseWebSocketProtocol):
     def accept_connection(self):
         try:
             fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
-            if not all(map(self.request.META.get, fields)):
+            if not all(map(self.headers.get, fields)):
                 raise ValueError("Missing/Invalid WebSocket headers")
 
             subprotocol_header = ''
-            subprotocols = self.request.META.get(
+            subprotocols = self.headers.get(
                 "HTTP_SEC_WEBSOCKET_PROTOCOL", '')
             subprotocols = [s.strip() for s in subprotocols.split(',')]
             if subprotocols:
@@ -205,7 +200,7 @@ class WebSocketProtocol(BaseWebSocketProtocol):
                 "%s"
                 "\r\n" % (
                     self.compute_accept_value(
-                        self.request.META.get("HTTP_SEC_WEBSOCKET_KEY")
+                        self.headers.get("HTTP_SEC_WEBSOCKET_KEY")
                     ),
                     subprotocol_header
                 )
@@ -298,3 +293,10 @@ class WebSocketProtocol(BaseWebSocketProtocol):
             self.abort()
         else:
             self.abort()
+
+protocols = {
+    '13': WebSocketProtocol13        
+}
+
+get_websocket_protocol = protocols.get
+

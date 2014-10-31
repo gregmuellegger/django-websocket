@@ -13,10 +13,18 @@ def base_view(request):
     }, context_instance=RequestContext(request))
 
 
+clients = []
+
 @require_websocket
 def echo(request):
-    for message in request.websocket:
-        request.websocket.send(message)
+    request.websocket.accept_connection()
+    try:
+        clients.append(request.websocket)
+        for message in request.websocket:
+            for client in clients:
+                client.send(message)
+    finally:
+        clients.remove(request.websocket)
 
 
 urlpatterns = patterns('',
