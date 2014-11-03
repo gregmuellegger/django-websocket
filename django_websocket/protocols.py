@@ -1,7 +1,6 @@
 #encoding:utf-8
 import os
 import array
-import logging
 import struct
 import select
 import socket
@@ -10,33 +9,7 @@ import base64
 from errno import EINTR
 
 
-logger = logging.getLogger(__name__)
-
-
-class BaseWebSocketProtocol(object):
-
-    def __init__(self, sock, headers):
-        self.sock = sock
-        self.headers = headers
-
-    def accept_connection(self):
-        raise NotImplementedError
-    
-    def write(self, data):
-        raise NotImplementedError
-
-    def read(self):
-        raise NotImplementedError
-
-    def close(self):
-        raise NotImplementedError
-
-    def abort(self):
-        raise NotImplementedError
-
-
-
-class WebSocketProtocol13(BaseWebSocketProtocol):
+class WebSocketProtocol13(object):
 
     LENGTH_7 = 0x7d
     LENGTH_16 = 1 << 16
@@ -60,7 +33,8 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
     STATUS_TLS_HANDSHAKE_ERROR = 1015
 
     def __init__(self, sock, headers, mask_outgoing=False):
-        BaseWebSocketProtocol.__init__(self, sock, headers)
+        self.sock = sock
+        self.headers = headers
         self.mask_outgoing = mask_outgoing
         self.server_terminated = False
         self.client_terminated = False
@@ -74,8 +48,8 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
         try:
             _, data = self.read_data()
             return data
-        except BaseException:
-            self.abort()
+        except socket.error:
+            self._abort()
 
     @classmethod
     def mask_or_unmask(cls, mask_key, data):
@@ -114,18 +88,7 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
         """
         while not self.server_terminated and not self.client_terminated:
             fin, opcode, data = self.read_frame()
-            if not fin and not opcode and not data:
-                # handle error:
-                # 'NoneType' object has no attribute 'opcode'
-                raise ValueError(
-                    "Not a valid fin %s opcode %s data %s" % (
-                        fin, opcode, data
-                    )
-                )
-            elif opcode in (
-                self.OPCODE_TEXT,
-                self.OPCODE_BINARY
-            ):
+            if opcode in (self.OPCODE_TEXT, self.OPCODE_BINARY):
                 return (opcode, data)
             elif opcode == self.OPCODE_CLOSE:
                 self.client_terminated = True
@@ -133,14 +96,16 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
                 return (opcode, None)
             elif opcode == self.OPCODE_PING:
                 self.write_pong(data)
+            else:
+                raise ValueError(
+                    "Unknown opcode %s(fin:%s, data:%s)" % (opcode, fin, data)
+                )
 
     def read_frame(self):
         """
         recieve data as frame from server.
         """
         header_bytes = self._read_strict(2)
-        if not header_bytes:
-            return None, None, None
         b1 = ord(header_bytes[0])
         fin = b1 >> 7 & 1
         opcode = b1 & 0xf
@@ -172,42 +137,41 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
                 raise socket.error('socket closed')
             _bytes += _buffer
             remaining = bufsize - len(_bytes)
-
         return _bytes
 
     def accept_connection(self):
-        try:
-            fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
-            if not all(map(self.headers.get, fields)):
-                raise ValueError("Missing/Invalid WebSocket headers")
+        fields = ("HTTP_SEC_WEBSOCKET_KEY", "HTTP_SEC_WEBSOCKET_VERSION")
+        if not all(map(self.headers.get, fields)):
+            raise ValueError("Missing/Invalid WebSocket headers")
 
-            subprotocol_header = ''
-            subprotocols = self.headers.get(
-                "HTTP_SEC_WEBSOCKET_PROTOCOL", '')
-            subprotocols = [s.strip() for s in subprotocols.split(',')]
-            if subprotocols:
-                selected = self.select_subprotocol(subprotocols)
-                if selected:
-                    assert selected in subprotocols
-                    subprotocol_header = (
-                        "Sec-WebSocket-Protocol: %s\r\n" % selected
-                    )
-            accept_header = (
-                "HTTP/1.1 101 Switching Protocols\r\n"
-                "Upgrade: websocket\r\n"
-                "Connection: Upgrade\r\n"
-                "Sec-WebSocket-Accept: %s\r\n"
-                "%s"
-                "\r\n" % (
-                    self.compute_accept_value(
-                        self.headers.get("HTTP_SEC_WEBSOCKET_KEY")
-                    ),
-                    subprotocol_header
+        subprotocol_header = ''
+        subprotocols = self.headers.get(
+            "HTTP_SEC_WEBSOCKET_PROTOCOL", '')
+        subprotocols = [s.strip() for s in subprotocols.split(',')]
+        if subprotocols:
+            selected = self.select_subprotocol(subprotocols)
+            if selected:
+                assert selected in subprotocols
+                subprotocol_header = (
+                    "Sec-WebSocket-Protocol: %s\r\n" % selected
                 )
+        accept_header = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Accept: %s\r\n"
+            "%s"
+            "\r\n" % (
+                self.compute_accept_value(
+                    self.headers.get("HTTP_SEC_WEBSOCKET_KEY")
+                ),
+                subprotocol_header
             )
+        )
+        try:
             self.sock.send(accept_header)
-        except BaseException:
-            self.abort()
+        except socket.error:
+            self._abort()
 
     def can_read(self, timeout=0.0):
         '''
@@ -219,7 +183,7 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
         except select.error as err:
             if err.args[0] == EINTR:
                 return False
-            raise err
+            self._abort()
         return self.sock in r
 
     def _write_frame(self, fin, opcode, data):
@@ -243,7 +207,10 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
             mask = os.urandom(4)
             data = mask + self._apply_mask(mask, data)
         frame += data
-        self.sock.send(frame)
+        try:
+            self.sock.send(frame)
+        except socket.error:
+            self._abort()
 
     def write(self, message, binary=False):
         """Sends the given message to the client of this Web Socket."""
@@ -252,11 +219,7 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
         else:
             opcode = 0x1
         message = message.encode('utf8')
-        try:
-            self._write_frame(True, opcode, message)
-        except IOError as e:
-            logger.debug(e)
-            self.abort()
+        self._write_frame(True, opcode, message)
 
     def write_ping(self, payload=""):
         """
@@ -281,18 +244,21 @@ class WebSocketProtocol13(BaseWebSocketProtocol):
         """
         self._write_frame(True, self.OPCODE_CLOSE, reason)
 
-    def abort(self):
-        """Instantly aborts the WebSocket connection by closing the socket"""
+    def _abort(self):
+        """Instantly _aborts the WebSocket connection by closing the socket"""
         self.server_terminated = True
         self.client_terminated = True
         self.sock.close()  # forcibly tear down the connection
 
-    def close(self):
+    def close(self, reason=None):
         if not self.server_terminated:
-            self.write_close()
-            self.abort()
-        else:
-            self.abort()
+            if not reason:
+                reason = b''
+            self.write_close(reason)
+            self.server_terminated = True
+        if self.client_terminated:
+            self.sock.close()
+
 
 protocols = {
     '13': WebSocketProtocol13        
