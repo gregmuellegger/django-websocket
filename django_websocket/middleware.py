@@ -33,6 +33,6 @@ class WebSocketMiddleware(object):
             return HttpResponseBadRequest()
 
     def process_response(self, request, response):
-        if request.is_websocket() and request.websocket._handshake_sent:
-            request.websocket._send_closing_frame(True)
+        if request.is_websocket() and request.websocket.handshake_sent:
+            request.websocket.close()
         return response
