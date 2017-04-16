@@ -1,16 +1,21 @@
+import logging
 from django.conf import settings
 from django.http import HttpResponseBadRequest
-from django_websocket.websocket import setup_websocket, MalformedWebSocket
+from .factory import WebSocketFactory
 
 
 WEBSOCKET_ACCEPT_ALL = getattr(settings, 'WEBSOCKET_ACCEPT_ALL', False)
+logger = logging.getLogger(__name__)
 
 
 class WebSocketMiddleware(object):
-    def process_request(self, request):
+    @classmethod
+    def process_request(cls, request):
         try:
-            request.websocket = setup_websocket(request)
-        except MalformedWebSocket, e:
+            factory = WebSocketFactory(request)
+            request.websocket = factory.create_websocket()
+        except ValueError as e:
+            logger.debug(e)
             request.websocket = None
             request.is_websocket = lambda: False
             return HttpResponseBadRequest()
@@ -19,7 +24,8 @@ class WebSocketMiddleware(object):
         else:
             request.is_websocket = lambda: True
 
-    def process_view(self, request, view_func, view_args, view_kwargs):
+    @classmethod
+    def process_view(cls, request, view_func, view_args, view_kwargs):
         # open websocket if its an accepted request
         if request.is_websocket():
             # deny websocket request if view can't handle websocket
@@ -27,12 +33,19 @@ class WebSocketMiddleware(object):
                 not getattr(view_func, 'accept_websocket', False):
                 return HttpResponseBadRequest()
             # everything is fine .. so prepare connection by sending handshake
-            request.websocket.send_handshake()
+            if getattr(view_func, 'required_websocket', False):
+                request.websocket.accept_connection()
         elif getattr(view_func, 'require_websocket', False):
             # websocket was required but not provided
             return HttpResponseBadRequest()
 
-    def process_response(self, request, response):
-        if request.is_websocket() and request.websocket._handshake_sent:
-            request.websocket._send_closing_frame(True)
+    @classmethod
+    def process_response(cls, request, response):
+        if request.is_websocket():
+            request.websocket.close()
         return response
+
+    @classmethod
+    def process_exception(cls, request, exception):
+        if request.is_websocket():
+            request.websocket.close()

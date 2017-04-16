@@ -31,8 +31,8 @@ long_description = UltraMagicString('\n\n'.join((
 
 
 setup(
-    name = u'django-websocket',
-    version = u'0.4.0pre1',
+    name = u'django_websocket',
+    version = u'0.0.1',
     url = u'http://pypi.python.org/pypi/django-websocket',
     license = u'BSD',
     description = u'Websocket support for django.',
@@ -53,10 +53,4 @@ setup(
     ],
     zip_safe = True,
     install_requires = ['setuptools'],
-
-    test_suite = 'django_websocket_tests.runtests.runtests',
-    tests_require=[
-        'django-test-utils',
-        'mock',
-    ],
 )

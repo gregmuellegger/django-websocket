@@ -1,7 +1,7 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 from django.shortcuts import render_to_response
 from django.template import RequestContext
-from django_websocket import require_websocket
+from django_websocket.decorators import require_websocket
 
 # Uncomment the next two lines to enable the admin:
 # from django.contrib import admin
@@ -13,10 +13,18 @@ def base_view(request):
     }, context_instance=RequestContext(request))
 
 
+clients = []
+
 @require_websocket
 def echo(request):
-    for message in request.websocket:
-        request.websocket.send(message)
+    request.websocket.accept_connection()
+    try:
+        clients.append(request.websocket)
+        for message in request.websocket:
+            for client in clients:
+                client.send(message)
+    finally:
+        clients.remove(request.websocket)
 
 
 urlpatterns = patterns('',
